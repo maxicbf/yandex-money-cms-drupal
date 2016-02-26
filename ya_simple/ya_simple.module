@@ -23,6 +23,15 @@ function ya_simple_menu(){
  */
 
 function ya_simple_form($form, &$form_state){
+  $allowed_types = array(
+    'AC' => t('Bank card'),
+    'PC' => t('Yandex money'),
+    'MC' => t('Mobile phone'),
+    'WM' => t('Webmoney'),
+    'AB' => t('Alpha-click'),
+    'QW' => t('QIWI Wallet'),
+    );
+
   $form['order_id'] = array(
     '#title' => t('Order ID'),
     '#type' => 'textfield',
@@ -37,6 +46,13 @@ function ya_simple_form($form, &$form_state){
     '#maxlength' => 50,
     '#required' => TRUE,
   );
+  $form['payment_type'] = array(
+    '#title' => t('Payment type'),
+    '#type' => 'radios',
+    '#default_value' => 'AC',
+    '#options' => $allowed_types,
+    '#required' => TRUE,
+    );
   $form['submit'] = array(
     '#type' => 'submit',
     '#value' => t('Make payment'),
@@ -68,6 +84,7 @@ function ya_simple_form_submit($form, &$form_state){
   $transaction = _ya_simple_transaction_by_order($form_state['values']['order_id']);
   if($transaction->status != 'payed'){
     $transaction->data['fio'] = check_plain($form_state['values']['order_fio']);
+    $transaction->data['payment_type'] = check_plain($form_state['values']['payment_type']);
     yamoney_transaction_save($transaction);
     drupal_goto('yasimple/'.$form_state['values']['order_id']);
   }
@@ -96,7 +113,7 @@ function ya_simple_final_form($form, &$form_state, $transaction){
     $target_url = yamoney_get_order_submission_url();
     $params = yamoney_get_order_submission_params($transaction);
 
-    dpm($params);
+    $params['paymentType'] = $transaction->data['payment_type'];
 
     $form = array();
 
