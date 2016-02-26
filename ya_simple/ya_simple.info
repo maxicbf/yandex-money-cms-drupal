@@ -1,0 +1,6 @@
+name = Yandex Simple Payment
+description = "Yandex.Money module for simple payments."
+package = Yandex.Money
+core = 7.x
+version = 1.2.0
+dependencies[] = yamoney

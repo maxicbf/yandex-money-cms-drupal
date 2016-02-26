@@ -1,0 +1,160 @@
+<?php
+
+/*
+* Implementation of hook_menu()
+*/
+
+function ya_simple_menu(){
+  $items['yasimple/%'] = array(
+    'title' => t('Payment'),
+    'description' => 'Форма вывода платежа по номеру заказа',
+    'page callback' => 'ya_simple_final',
+    'page arguments' => array(1),
+    'access arguments' => array('access content'),
+    'type' => MENU_CALLBACK,
+  );
+  return $items;
+}
+
+/**
+ * @param array $form
+ * @param array $form_state
+ * @return array
+ */
+
+function ya_simple_form($form, &$form_state){
+  $form['order_id'] = array(
+    '#title' => t('Order ID'),
+    '#type' => 'textfield',
+    '#size' => 10,
+    '#maxlength' => 10,
+    '#required' => TRUE,
+  );
+  $form['order_fio'] = array(
+    '#title' => t('Fullname'),
+    '#type' => 'textfield',
+    '#size' => 30,
+    '#maxlength' => 50,
+    '#required' => TRUE,
+  );
+  $form['submit'] = array(
+    '#type' => 'submit',
+    '#value' => t('Make payment'),
+  );
+  return $form;
+}
+
+/*
+* Form validation. Error if transaction for given order ID not exists.
+*/
+
+function ya_simple_form_validate($form, &$form_state){
+  if(function_exists('_ya_simple_get_order')){
+
+  } else {
+    $order_id = (int)$form_state['values']['order_id'];
+    $transaction = _ya_simple_transaction_by_order($order_id);
+
+    if (!$transaction->order_id)
+      form_set_error('order_id', t('Invalid order ID'));
+  }
+}
+
+/*
+* Submitting form. Replace source customer name with entered value and redirect to confirmation form. Display message if transaction already payed.
+*/
+
+function ya_simple_form_submit($form, &$form_state){
+  $transaction = _ya_simple_transaction_by_order($form_state['values']['order_id']);
+  if($transaction->status != 'payed'){
+    $transaction->data['fio'] = check_plain($form_state['values']['order_fio']);
+    yamoney_transaction_save($transaction);
+    drupal_goto('yasimple/'.$form_state['values']['order_id']);
+  }
+  else {
+    drupal_set_message(t('Order already payed'));
+  }
+}
+
+/*
+* Page view with confirmation form
+*/
+
+function ya_simple_final($arg){
+  $transaction = _ya_simple_transaction_by_order((int)$arg);
+  if($transaction){
+    return drupal_render(drupal_get_form('ya_simple_final_form', $transaction));
+  }
+}
+
+/*
+*  Confirmation form
+*/
+
+function ya_simple_final_form($form, &$form_state, $transaction){
+
+    $target_url = yamoney_get_order_submission_url();
+    $params = yamoney_get_order_submission_params($transaction);
+
+    dpm($params);
+
+    $form = array();
+
+    $form['e_order_id'] = array(
+      '#type' => 'markup',
+      '#markup' => '<div><strong>'.t('Order ID').':</strong> '.$transaction->order_id.'</div>',
+      );
+
+    $form['e_order_fio'] = array(
+      '#type' => 'markup',
+      '#markup' => '<div><strong>'.t('Payer name').':</strong> '.$transaction->data['fio'].'</div>',
+      );
+
+    $form['e_order_amount'] = array(
+      '#type' => 'markup',
+      '#markup' => '<div><strong>'.t('Amount').':</strong> '.$transaction->amount.'</div>',
+      );
+
+    $form['#action'] = $target_url;
+
+    foreach ($params as $key => $value) {
+      $form[$key] = array(
+        '#type' => 'hidden',
+        '#value' => $value,
+      );
+    }
+    $form['actions'] = array('#type' => 'actions');
+    $form['actions']['submit'] = array(
+      '#type' => 'submit',
+      '#value' => t('Submit order'),
+    );
+
+    return $form;
+
+}
+
+/**
+ * Process successful payment to update Ubercart order.
+ * Implements hook_yamoney_process_payment_alter().
+ * @param array $payment
+ */
+function ya_simple_yamoney_process_payment_alter(&$payment) {
+  /** @var YAMoneyTransaction $transaction */
+  $transaction = $payment['transaction'];
+  module_invoke_all('simple_payment', 'enrolled', $transaction);
+}
+
+/**
+* Return last transaction object for given order ID
+*/
+function _ya_simple_transaction_by_order($order_id = 0){
+  $transaction = db_select('yamoney_transaction', 'yt')
+    ->fields('yt')
+    ->condition('yt.order_id', $order_id)
+    ->orderBy('yt.ymid', 'DESC')
+    ->range(0, 1)
+    ->execute()
+    ->fetch();
+
+  return yamoney_transaction_load($transaction->ymid);
+}
