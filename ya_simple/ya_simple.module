@@ -127,9 +127,14 @@ function ya_simple_final_form($form, &$form_state, $transaction){
       '#markup' => '<div><strong>'.t('Payer name').':</strong> '.$transaction->data['fio'].'</div>',
       );
 
+    $form['e_order_subject'] = array(
+      '#type' => 'markup',
+      '#markup' => '<div><strong>'.t('Subject').':</strong> '.$transaction->data['subject'].'</div>',
+      );
+
     $form['e_order_amount'] = array(
       '#type' => 'markup',
-      '#markup' => '<div><strong>'.t('Amount').':</strong> '.$transaction->amount.'</div>',
+      '#markup' => '<div><strong>'.t('Sum').':</strong> '.$transaction->amount.'</div>',
       );
 
     $form['#action'] = $target_url;

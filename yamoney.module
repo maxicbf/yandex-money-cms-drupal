@@ -51,7 +51,11 @@ function yamoney_menu() {
     'access callback' => 'yamoney_check_server_ip',
     'type' => MENU_CALLBACK,
   );
-
+  $items['yamoney/check_wallet'] = array(
+    'page callback' => 'yamoney_check_wallet',
+    'access callback' => 'yamoney_check_server_ip',
+    'type' => MENU_CALLBACK,
+    );
   // Config page
   $items['admin/config/system/yamoney'] = array(
     'title' => t('Yandex.Money Core'),
@@ -205,10 +209,15 @@ function yamoney_check_order() {
   }
 
   $transaction = yamoney_transaction_load($_POST['transaction_id']);
+
   if (!$transaction) {
     yamoney_check_send_result('checkOrderResponse', YAMONEY_CHECK_RESULT_CODE_ERROR_CUSTOM, 'Invalid transaction_id provided.');
   }
 
+  if (floatval($_POST['orderSumAmount']) < floatval($transaction->amount)) {
+    yamoney_check_send_result('checkOrderResponse', YAMONEY_CHECK_RESULT_CODE_ERROR_CUSTOM, 'Invalid amount');
+  }
+  
   if ($transaction->status !== YAMoneyTransaction::STATUS_IN_PROCESS) {
     yamoney_check_send_result('checkOrderResponse', YAMONEY_CHECK_RESULT_CODE_ERROR_CUSTOM,
       'Invalid transaction state: ' . $transaction->status . '. Expected: ' . YAMoneyTransaction::STATUS_IN_PROCESS . '.');
@@ -226,12 +235,59 @@ function yamoney_check_order() {
     yamoney_check_send_result('checkOrderResponse', YAMONEY_CHECK_RESULT_CODE_ERROR_CUSTOM, $error);
   }
 
-  if (yamoney_update_transaction_status($transaction->ymid, YAMoneyTransaction::STATUS_PROCESSED)) {
+  if($_POST['paymentType'] == 'AC' && $_POST['wbp_messagetype'] == 'MoneyInvitationRequest'){
     yamoney_check_send_result('checkOrderResponse');
   }
   else {
-    yamoney_check_send_result('checkOrderResponse', YAMONEY_CHECK_RESULT_CODE_ERROR_CUSTOM, 'Can not save transaction.');
+    if (yamoney_update_transaction_status($transaction->ymid, YAMoneyTransaction::STATUS_PROCESSED)) {
+      yamoney_check_send_result('checkOrderResponse');
+    }
+    else {
+      yamoney_check_send_result('checkOrderResponse', YAMONEY_CHECK_RESULT_CODE_ERROR_CUSTOM, 'Can not save transaction.');
+    }
   }
+
+}
+/**
+ * Handle "check payment" requests from Yandex.Money
+ */
+function yamoney_check_wallet() {
+
+    if (!isset($_POST['transaction_id'])) {
+        http_response_code (404);
+        return;
+    }
+
+    $string = $_POST['notification_type'].'&'.$_POST['operation_id'].'&'.$_POST['amount'].'&'.$_POST['currency'].
+        '&'.$_POST['datetime'].'&'.$_POST['sender'].'&'.$_POST['codepro'].'&'.
+        variable_get('yamoney_secret', '').'&'.$_POST['label'];
+    if(sha1($string) !== $_POST['sha1_hash']){
+        http_response_code (401);
+        return;
+    }
+
+    $transaction = yamoney_transaction_load($_POST['transaction_id']);
+    if (!$transaction) {
+        http_response_code (404);
+        return;
+    }
+
+    if (floatval($_POST['withdraw_amount']) < floatval($transaction->amount)) {
+        http_response_code (403);
+        return;
+    }
+
+    if ($transaction->status !== YAMoneyTransaction::STATUS_PROCESSED && $transaction->status !== YAMoneyTransaction::STATUS_PAYED) {
+        http_response_code (401);
+        return;
+    }
+
+    $payment = array(
+        'success' => TRUE,
+        'transaction' => $transaction,
+        'request' => $_POST,
+    );
+    drupal_alter('yamoney_process_payment', $payment);
 }
 
 /**
@@ -286,6 +342,7 @@ function yamoney_check_payment() {
  * @param string $message
  */
 function yamoney_check_send_result($type, $code = 0, $message = '') {
+  if (count($_POST)==0) return;
   $attributes = array(
     'performedDatetime' => $_POST['requestDatetime'],
     'code' => $code,
@@ -390,7 +447,7 @@ function yamoney_get_shop_params(YAMoneyTransaction $transaction) {
   $params['shopFailURL'] = url('yamoney/fail', array('absolute' => TRUE));
 
   // Детали способа совершения платежа.
-  $params['paymentType'] = variable_get('yamoney_default_payment_method', YAMONEY_DEFAULT_PAYMENT_METHOD);
+  $params['paymentType'] = (variable_get('yamoney_paymode')=='shop')?variable_get('yamoney_default_payment_method', YAMONEY_DEFAULT_PAYMENT_METHOD):'';
 
   // Provide CMS name
   $params['cms_name'] = 'drupal';
@@ -419,6 +476,8 @@ function yamoney_get_quick_params(YAMoneyTransaction $transaction) {
   $params['writable-targets'] = FALSE;
   $params['comment-needed'] = FALSE;
   $params['label'] = $transaction->order_id;
+  $params['order_id'] = (int) $transaction->order_id;
+  $params['successUrl'] = url('yamoney/complete', array('absolute' => TRUE));
   $params['targets'] = t('Payments for order No') . $transaction->order_id;
   $params['sum'] = $transaction->amount;
   $params['quickpay-form'] = 'shop';
@@ -426,7 +485,6 @@ function yamoney_get_quick_params(YAMoneyTransaction $transaction) {
   $params['cms_name'] = 'drupal';
 
   drupal_alter('yamoney_quick_params', $params);
-
   return $params;
 }
 
@@ -434,23 +492,11 @@ function yamoney_get_quick_params(YAMoneyTransaction $transaction) {
  * @return string
  */
 function yamoney_get_order_submission_url() {
-  $is_test = variable_get('yamoney_mode', 'test') === 'test';
+  $is_test = (variable_get('yamoney_mode', 'test') === 'test')?'demo':'';
   if (variable_get('yamoney_shop', 0)) {
     // shop
-    if ($is_test) {
-      return 'https://demomoney.yandex.ru/eshop.xml';
-    }
-    else {
-      return 'https://money.yandex.ru/eshop.xml';
-    }
-  }
-  else {
-    // quick
-    if ($is_test) {
-      return 'https://demomoney.yandex.ru/quickpay/confirm.xml';
-    }
-    else {
-      return 'https://money.yandex.ru/quickpay/confirm.xml';
-    }
+    return 'https://'.$is_test.'money.yandex.ru/eshop.xml';
+  }else{
+    return 'https://money.yandex.ru/quickpay/confirm.xml';
   }
 }

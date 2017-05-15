@@ -111,7 +111,7 @@ function yamoney_transaction_save(YAMoneyTransaction $transaction) {
  * @return bool
  */
 function yamoney_update_transaction_status($ymid, $status) {
-  return !!db_update('yamoney_transaction')
+  !!db_update('yamoney_transaction')
     ->fields(array('status' => $status))
     ->condition('ymid', $ymid)
     ->execute();
