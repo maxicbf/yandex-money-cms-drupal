@@ -209,6 +209,7 @@ function yamoney_check_order() {
   }
 
   $transaction = yamoney_transaction_load($_POST['transaction_id']);
+
   if (!$transaction) {
     yamoney_check_send_result('checkOrderResponse', YAMONEY_CHECK_RESULT_CODE_ERROR_CUSTOM, 'Invalid transaction_id provided.');
   }
@@ -234,12 +235,18 @@ function yamoney_check_order() {
     yamoney_check_send_result('checkOrderResponse', YAMONEY_CHECK_RESULT_CODE_ERROR_CUSTOM, $error);
   }
 
-  if (yamoney_update_transaction_status($transaction->ymid, YAMoneyTransaction::STATUS_PROCESSED)) {
+  if($_POST['paymentType'] == 'AC' && $_POST['wbp_messagetype'] == 'MoneyInvitationRequest'){
     yamoney_check_send_result('checkOrderResponse');
   }
   else {
-    yamoney_check_send_result('checkOrderResponse', YAMONEY_CHECK_RESULT_CODE_ERROR_CUSTOM, 'Can not save transaction.');
+    if (yamoney_update_transaction_status($transaction->ymid, YAMoneyTransaction::STATUS_PROCESSED)) {
+      yamoney_check_send_result('checkOrderResponse');
+    }
+    else {
+      yamoney_check_send_result('checkOrderResponse', YAMONEY_CHECK_RESULT_CODE_ERROR_CUSTOM, 'Can not save transaction.');
+    }
   }
+
 }
 /**
  * Handle "check payment" requests from Yandex.Money
