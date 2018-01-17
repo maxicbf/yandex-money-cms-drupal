@@ -196,6 +196,7 @@ function yamoney_create_md5($params = array()) {
  * Handle "check order" requests from Yandex.Money
  */
 function yamoney_check_order() {
+  dd($_POST);
   if (!isset($_POST['action']) || $_POST['action'] !== 'checkOrder') {
     yamoney_check_send_result('checkOrderResponse', YAMONEY_CHECK_RESULT_CODE_ERROR_REQUEST, 'Invalid action. Expected action: checkOrder.');
   }
@@ -217,7 +218,7 @@ function yamoney_check_order() {
   if (floatval($_POST['orderSumAmount']) < floatval($transaction->amount)) {
     yamoney_check_send_result('checkOrderResponse', YAMONEY_CHECK_RESULT_CODE_ERROR_CUSTOM, 'Invalid amount');
   }
-  
+
   if ($transaction->status !== YAMoneyTransaction::STATUS_IN_PROCESS) {
     yamoney_check_send_result('checkOrderResponse', YAMONEY_CHECK_RESULT_CODE_ERROR_CUSTOM,
       'Invalid transaction state: ' . $transaction->status . '. Expected: ' . YAMoneyTransaction::STATUS_IN_PROCESS . '.');
@@ -294,6 +295,7 @@ function yamoney_check_wallet() {
  * Handle "check payment" requests from Yandex.Money
  */
 function yamoney_check_payment() {
+  dd($_POST);
   if (!isset($_POST['action']) || $_POST['action'] !== 'paymentAviso') {
     yamoney_check_send_result('paymentAvisoResponse', YAMONEY_CHECK_RESULT_CODE_ERROR_REQUEST, 'Invalid action. Expected action: paymentAviso.');
   }
@@ -342,6 +344,7 @@ function yamoney_check_payment() {
  * @param string $message
  */
 function yamoney_check_send_result($type, $code = 0, $message = '') {
+  dd($_POST);
   if (count($_POST)==0) return;
   $attributes = array(
     'performedDatetime' => $_POST['requestDatetime'],

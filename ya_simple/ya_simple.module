@@ -46,6 +46,14 @@ function ya_simple_form($form, &$form_state){
     '#maxlength' => 50,
     '#required' => TRUE,
   );
+  $form['order_contact'] = array(
+    '#title' => 'E-mail или мобильный телефон',
+    '#type' => 'textfield',
+    '#size' => 30,
+    '#maxlength' => 50,
+    '#required' => TRUE,
+    '#description' => 'Для отправки чека. Если не указать, платеж не пройдет. Телефон в формате +7xxxxxxxxxx'
+  );
   $form['payment_type'] = array(
     '#title' => t('Payment type'),
     '#type' => 'radios',
@@ -85,6 +93,7 @@ function ya_simple_form_submit($form, &$form_state){
   if($transaction->status != 'payed'){
     $transaction->data['fio'] = check_plain($form_state['values']['order_fio']);
     $transaction->data['payment_type'] = check_plain($form_state['values']['payment_type']);
+    $transaction->data['contact'] = check_plain($form_state['values']['order_contact']);
     yamoney_transaction_save($transaction);
     drupal_goto('yasimple/'.$form_state['values']['order_id']);
   }
@@ -145,11 +154,27 @@ function ya_simple_final_form($form, &$form_state, $transaction){
         '#value' => $value,
       );
     }
+
+    // Для чека
+    $form['ym_merchant_receipt'] = array(
+        '#type' => 'hidden',
+        '#value' => '{"customerContact": "'.$transaction->data['contact'].'",
+        "taxSystem": 1,
+          "items":[
+            {"quantity": 1, "price": {"amount": '.$transaction->amount.'},  "tax": 1,"text": "Изделия из оргстекла, комплект"}]}',
+    );
+    $form['sum'] = array(
+        '#type' => 'hidden',
+        '#value' => $transaction->amount,
+    );
+
     $form['actions'] = array('#type' => 'actions');
     $form['actions']['submit'] = array(
       '#type' => 'submit',
       '#value' => t('Submit order'),
     );
+
+    dd($form);
 
     return $form;
 
